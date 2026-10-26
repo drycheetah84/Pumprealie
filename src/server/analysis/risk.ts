@@ -240,7 +240,10 @@ export function assessRisk(t: TokenState, f: MarketFeatures, ctx: RiskContext): 
     }
     if (mi.decimals !== 6) c.add('permissions_mechanics', 'NONSTANDARD_DECIMALS', 30, 'medium', `Mint has ${mi.decimals} decimals (Pump standard is 6)`, mi.source);
   }
-  if (t.isMayhem) c.add('permissions_mechanics', 'MAYHEM_MODE', 60, 'high', 'Mayhem-mode coin: non-standard curve parameters and protocol agent trading', 'solana-rpc', 0.9);
+  if (t.isMayhem) {
+    c.flags.add('NONSTANDARD_MECHANICS');
+    c.add('permissions_mechanics', 'MAYHEM_MODE', 60, 'critical', 'Mayhem-mode coin: virtual reserves are adjusted by the protocol outside of trades, so price can move without trading', 'solana-rpc', 0.9);
+  }
   if (t.isCashback) c.add('permissions_mechanics', 'CASHBACK_COIN', 5, 'info', 'Cashback coin: creator fee is routed to traders', 'solana-rpc', 0.9);
 
   // ---------- data reliability -----------------------------------------------------

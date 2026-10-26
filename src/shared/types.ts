@@ -29,7 +29,8 @@ export type CriticalFlag =
   | 'DATA_STALE'
   | 'DATA_INCONSISTENT'
   | 'CREATOR_DUMPING'
-  | 'MIGRATION_IN_PROGRESS';
+  | 'MIGRATION_IN_PROGRESS'
+  | 'NONSTANDARD_MECHANICS';
 
 /** One piece of evidence behind a risk or opportunity judgement. */
 export interface Finding {

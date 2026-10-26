@@ -64,6 +64,21 @@ export interface TokenState {
 }
 
 const TRADE_CAPACITY = 3000;
+
+/**
+ * Timing-independent consistency check between two observations of the same bonding curve.
+ * Between trades the constant product k = vSol·vToken is (up to rounding) invariant, and the
+ * virtual−real offsets of both reserves never change. Disagreement means one source is wrong.
+ */
+export function curveInvariantMismatchPct(a: LiquidityState, b: LiquidityState): number {
+  const k1 = a.baseReserve * a.quoteReserve;
+  const k2 = b.baseReserve * b.quoteReserve;
+  if (!(k1 > 0 && k2 > 0)) return 100;
+  const kDiff = Math.abs(k1 - k2) / k2;
+  const solOffsetDiff = Math.abs(a.quoteReserve - a.realQuoteReserve - (b.quoteReserve - b.realQuoteReserve)) / b.quoteReserve;
+  const tokOffsetDiff = Math.abs(a.baseReserve - a.realBaseReserve - (b.baseReserve - b.realBaseReserve)) / b.baseReserve;
+  return Math.max(kDiff, solOffsetDiff, tokOffsetDiff) * 100;
+}
 const LIQ_CAPACITY = 600;
 
 export function newTokenState(mint: string, at: number): TokenState {
@@ -255,12 +270,16 @@ export class TokenRegistry {
     }
     t.rpcMissing = false;
     const prev = t.liquidity;
-    if (prev && prev.venue === l.venue) {
+    if (t.isMayhem) {
+      // Mayhem-mode curves have their virtual reserves adjusted by the protocol outside of
+      // trades, so neither invariant nor timing comparisons are meaningful.
+      t.inconsistencyPct = null;
+    } else if (prev && prev.venue === l.venue && prev.venue === 'bonding_curve' && prev.source.startsWith('event')) {
+      t.inconsistencyPct = curveInvariantMismatchPct(prev, l);
+    } else if (prev && prev.venue === l.venue && Math.abs(at - prev.observedAt) < 2_000) {
       const p1 = spotPriceSol(prev);
       const p2 = spotPriceSol(l);
-      // Only compare when the event state is recent; otherwise the market simply moved.
-      if (p1 && p2 && Math.abs(at - prev.observedAt) < 5_000) t.inconsistencyPct = (Math.abs(p1 - p2) / p2) * 100;
-      else t.inconsistencyPct = 0;
+      t.inconsistencyPct = p1 && p2 ? (Math.abs(p1 - p2) / p2) * 100 : null;
     }
     t.rpcLiquidity = l;
     t.feeBps = l.feeBps;

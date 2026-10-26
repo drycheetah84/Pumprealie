@@ -18,7 +18,8 @@ import {
   type GlobalConfig,
   type Pool,
 } from '@pump-fun/pump-sdk/swap';
-import { ExtensionType, getExtensionTypes, unpackAccount, unpackMint, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { ExtensionType, getExtensionData, getExtensionTypes, unpackAccount, unpackMint, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { unpack as unpackTokenMetadata } from '@solana/spl-token-metadata';
 import { PublicKey, type AccountInfo } from '@solana/web3.js';
 import BN from 'bn.js';
 import type { HolderEntry, HolderSnapshot, MintInfo } from '../../../shared/types';
@@ -216,13 +217,29 @@ export class OnchainInspector {
     };
   }
 
-  static parseMint(mint: string, info: AccountInfo<Buffer>, at = Date.now()): MintInfo {
+  static parseMint(mint: string, info: AccountInfo<Buffer>, at = Date.now()): MintInfo & { name?: string; symbol?: string } {
     const program = info.owner;
     const m = unpackMint(new PublicKey(mint), info, program);
     const extensions = program.equals(TOKEN_2022_PROGRAM_ID)
       ? getExtensionTypes(m.tlvData).map((t) => ExtensionType[t] ?? `Unknown(${t})`)
       : [];
+    let name: string | undefined;
+    let symbol: string | undefined;
+    if (extensions.includes('TokenMetadata')) {
+      try {
+        const data = getExtensionData(ExtensionType.TokenMetadata, m.tlvData);
+        if (data) {
+          const md = unpackTokenMetadata(data);
+          name = md.name.slice(0, 64);
+          symbol = md.symbol.slice(0, 16);
+        }
+      } catch {
+        /* metadata is informational only */
+      }
+    }
     return {
+      name,
+      symbol,
       fetchedAt: at,
       source: 'solana-rpc:mint-account',
       tokenProgram: program.toBase58(),
@@ -233,6 +250,25 @@ export class OnchainInspector {
       extensions,
       riskyExtensions: extensions.filter((e) => RISKY_EXTENSIONS.has(e)),
     };
+  }
+
+  /** Batch-read mint accounts (≤100 per call). */
+  async fetchMintInfos(mints: string[]): Promise<Map<string, (MintInfo & { name?: string; symbol?: string }) | null>> {
+    const out = new Map<string, (MintInfo & { name?: string; symbol?: string }) | null>();
+    for (let i = 0; i < mints.length; i += 100) {
+      const chunk = mints.slice(i, i + 100);
+      const infos = await this.rpc.getMultipleAccountsInfo(chunk.map((m) => new PublicKey(m)));
+      chunk.forEach((m, j) => {
+        const info = infos[j];
+        if (!info || (!info.owner.equals(TOKEN_PROGRAM_ID) && !info.owner.equals(TOKEN_2022_PROGRAM_ID))) return out.set(m, null);
+        try {
+          out.set(m, OnchainInspector.parseMint(m, info));
+        } catch {
+          out.set(m, null);
+        }
+      });
+    }
+    return out;
   }
 
   async fetchMintInfo(mint: string): Promise<MintInfo | null> {

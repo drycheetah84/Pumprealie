@@ -72,7 +72,15 @@ export function computeFeatures(t: TokenState, now: number): MarketFeatures {
     ? 'spot price (from reserves) × on-chain mint supply'
     : 'spot price (from reserves) × standard Pump supply (1B; mint not yet verified)';
 
-  const windows = [60, 300, 900, 3600].map((w) => windowStats(trades, now - w * 1000, w, priceAt(trades, now - w * 1000), priceSol));
+  // Window start price: last trade before the window. If the token launched inside the window
+  // and we observed the launch, its first observed price is the true starting price.
+  const startPrice = (from: number) => {
+    const p = priceAt(trades, from);
+    if (p !== null) return p;
+    if (t.observedFromLaunch && t.createdAt !== null && t.createdAt >= from && trades[0]) return tradePrice(trades[0]);
+    return null;
+  };
+  const windows = [60, 300, 900, 3600].map((w) => windowStats(trades, now - w * 1000, w, startPrice(now - w * 1000), priceSol));
   const w1 = windows[0]!;
   const w5 = windows[1]!;
 
