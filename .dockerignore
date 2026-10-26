@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+.env
+.env.*
+*.keypair.json
+wallet*.json
+.git
+tests/fixtures/*.local.*

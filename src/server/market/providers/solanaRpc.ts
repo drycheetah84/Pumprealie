@@ -17,6 +17,12 @@ import type { ProviderHealthMonitor } from '../providerHealth';
 export class RpcRateLimitError extends Error {}
 
 /**
+ * Heavy enrichment methods that public endpoints often rate-limit. Their 429s mean the
+ * enrichment is unavailable (recorded as missing data), not that the RPC is unhealthy.
+ */
+const OPTIONAL_METHODS = new Set(['getTokenLargestAccounts', 'getSignaturesForAddress']);
+
+/**
  * Thin wrapper around web3.js `Connection` that adds: client-side rate limiting,
  * latency/health reporting, timeouts, and failover to an optional backup endpoint.
  * It never retries state-changing calls (sendRawTransaction) on its own.
@@ -78,8 +84,13 @@ export class SolanaRpc {
       } catch (e) {
         lastErr = e;
         const msg = errMsg(e);
-        this.health.failure(this.healthName, `${label}: ${msg}`);
         const rateLimited = /429|rate limit|Too many requests/i.test(msg);
+        if (rateLimited && OPTIONAL_METHODS.has(label)) {
+          this.blockedUntil.set(label, Date.now() + 120_000);
+          this.health.setDetail(this.healthName, `${this.endpointName} endpoint; ${label} rate-limited (enrichment degraded)`);
+          throw new RpcRateLimitError(msg);
+        }
+        this.health.failure(this.healthName, `${label}: ${msg}`);
         if (rateLimited) this.blockedUntil.set(label, Date.now() + (/specific RPC call/i.test(msg) ? 120_000 : 10_000));
         if (this.endpoints.length > 1) {
           this.active = (this.active + 1) % this.endpoints.length;

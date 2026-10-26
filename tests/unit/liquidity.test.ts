@@ -13,7 +13,7 @@ describe('liquidity math vs official Pump SDK (real mainnet account fixture)', (
     const state = OnchainInspector.curveToLiquidity(curve, feeBps, Date.now());
     for (const lamports of [1_000_000, 10_000_000, 50_000_000]) {
       it(`${name} curve buy ${lamports} lamports matches SDK within 0.01%`, () => {
-        const sdk = Number(getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: curve.tokenTotalSupply, bondingCurve: curve, amount: new BN(lamports) }).toString());
+        const sdk = Number(getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: curve.tokenTotalSupply, bondingCurve: curve, amount: new BN(lamports), quoteMint: curve.quoteMint }).toString());
         const mine = quoteBuy(state, lamports).tokensOut;
         expect(Math.abs(mine - sdk) / sdk).toBeLessThan(1e-4);
       });

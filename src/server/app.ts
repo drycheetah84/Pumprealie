@@ -143,7 +143,11 @@ export function buildApp(env: Env, log: Logger): App {
     executors.live = liveExecutor;
   }
 
-  let modes: ModeController;
+  const modes = new ModeController(env, store, bus, {
+    walletPublicKey: () => signer?.publicKey.toBase58() ?? null,
+    paperTradesClosed: () => portfolio.closedCount('paper'),
+    settings: () => settings,
+  });
   const execution = new ExecutionService(
     db,
     orders,
@@ -155,11 +159,6 @@ export function buildApp(env: Env, log: Logger): App {
     bus,
     log,
   );
-  modes = new ModeController(env, store, bus, {
-    walletPublicKey: () => signer?.publicKey.toBase58() ?? null,
-    paperTradesClosed: () => portfolio.closedCount('paper'),
-    settings: () => settings,
-  });
   const reconciler = liveExecutor ? new LiveReconciler(rpc, liveExecutor, orders, execution, portfolio, store, bus, log) : null;
 
   const engine = new TradingEngine({

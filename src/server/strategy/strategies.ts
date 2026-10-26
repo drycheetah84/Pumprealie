@@ -79,6 +79,7 @@ export const volumeAccelerationStrategy: Strategy = {
     minLiquiditySol: p(8, 1, 80, 1, 'Minimum withdrawable SOL liquidity'),
     minAcceleration: p(2.5, 1.2, 10, 0.25, '1m volume / prior 5m per-minute average'),
     minVolume1mSol: p(2, 0.2, 50, 0.2, 'Minimum 1-minute volume'),
+    minPriorVolumePerMinSol: p(0.5, 0.05, 20, 0.05, 'Baseline volume required before the spike (launch bursts are not acceleration)'),
     maxRepeatedSizeShare: p(0.3, 0.05, 0.8, 0.05, 'Discount repetitive same-size trades'),
     maxRoundTripShare: p(0.35, 0.05, 0.9, 0.05, 'Discount wallets that buy and sell'),
     minBuyShare1m: p(0.55, 0.5, 0.9, 0.05, 'Buy share of last-minute volume'),
@@ -87,7 +88,7 @@ export const volumeAccelerationStrategy: Strategy = {
     trailingPct: p(8, 3, 40, 1, 'Trailing stop'),
     maxHoldSec: p(600, 60, 7200, 60, 'Maximum holding period'),
   },
-  entryCriteria: ['volume acceleration above threshold', 'minimum 1m volume', 'low repetitive-size and round-trip shares', 'buy-dominated last minute'],
+  entryCriteria: ['volume acceleration above threshold', 'minimum 1m volume', 'established prior baseline volume (launch bursts excluded)', 'low repetitive-size and round-trip shares', 'buy-dominated last minute'],
   exitCriteria: ['shared exit policy'],
   evaluate(ctx, params) {
     const f = ctx.features;
@@ -95,6 +96,8 @@ export const volumeAccelerationStrategy: Strategy = {
     const r = baseChecks(ctx, params);
     if (f.volumeAcceleration === null || f.volumeAcceleration < params.minAcceleration!) r.push(`acceleration ${f.volumeAcceleration?.toFixed(2) ?? 'n/a'} < ${params.minAcceleration}`);
     if (w1.volumeSol < params.minVolume1mSol!) r.push(`1m volume ${w1.volumeSol.toFixed(2)} < ${params.minVolume1mSol}`);
+    const priorPerMin = (f.windows[1]!.volumeSol - w1.volumeSol) / 4;
+    if (priorPerMin < params.minPriorVolumePerMinSol!) r.push(`prior volume ${priorPerMin.toFixed(2)} SOL/min below baseline ${params.minPriorVolumePerMinSol}`);
     if ((f.repeatedSizeShare ?? 0) > params.maxRepeatedSizeShare!) r.push('repetitive trade sizes');
     if ((f.roundTripTraderShare ?? 0) > params.maxRoundTripShare!) r.push('round-trip volume');
     const bs = w1.volumeSol > 0 ? w1.buyVolumeSol / w1.volumeSol : 0;

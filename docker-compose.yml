@@ -1,0 +1,28 @@
+# Production-oriented single-node deployment.
+# The container listens on 0.0.0.0 internally, but the port is published on the
+# host loopback only. Put an authenticated HTTPS reverse proxy in front for remote access
+# (see SECURITY.md). DASHBOARD_API_TOKEN is required (APP_ENV=production).
+services:
+  pumpraelie:
+    build: .
+    image: pumpraelie:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATA_DIR: /data
+      API_HOST: 0.0.0.0
+      # Mounted read-only below; only used if you enable live trading.
+      # WALLET_KEYPAIR_PATH: /run/secrets/trading-wallet.json
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - pumpraelie-data:/data
+      # - /secure/path/pumpraelie-trading.json:/run/secrets/trading-wallet.json:ro
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
+
+volumes:
+  pumpraelie-data:

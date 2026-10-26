@@ -88,8 +88,12 @@ export function estimateProfitability(
     },
     { name: 'rug', move: -85, drain: 0.85, explanation: 'liquidity drained / coordinated dump; exit into ~15% of current liquidity' },
   ];
+  // Scenario moves are measured from the DECISION-time price, so adverse latency drift and our
+  // own entry impact are real costs rather than a new baseline.
+  const afterBuySpot = spotPriceSol(afterBuy);
+  const toDecisionMove = (move: number) => (spot && afterBuySpot ? ((spot * (1 + move / 100)) / afterBuySpot - 1) * 100 : move);
   const scenarios: ScenarioResult[] = defs.map((d) => {
-    let s = shiftPrice(afterBuy, d.move);
+    let s = shiftPrice(afterBuy, toDecisionMove(d.move));
     if (d.drain > 0) s = drainLiquidity(s, d.drain);
     const out = quoteSell(s, tokens);
     const net = out.quoteOutLamports - costLamports - fee;
