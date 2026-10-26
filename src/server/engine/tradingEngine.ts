@@ -143,6 +143,10 @@ export class TradingEngine {
     const set = new Map<string, TokenState>();
     for (const t of [...pinned, ...active]) set.set(t.mint, t);
     const refSize = Math.min(this.d.env.HARD_MAX_POSITION_SOL, (env.TRADING_CAPITAL_SOL * settings.maxPositionPct) / 100);
+    // Identity collisions: active tokens sharing a symbol/name (copycats of trending launches).
+    const identity = new Map<string, number>();
+    const idKeys = (t: TokenState) => [t.symbol, t.name].filter((x): x is string => Boolean(x)).map((x) => x.trim().toLowerCase());
+    for (const t of market.activeTokens(now, 3600_000, 2000)) for (const k of new Set(idKeys(t))) identity.set(k, (identity.get(k) ?? 0) + 1);
     const buyCandidates: Array<{ t: TokenState; a: TokenAssessment; signal: NonNullable<ReturnType<typeof assessToken>['signal']> }> = [];
     for (const t of set.values()) {
       const creator = t.creator ? store.getCreator(t.creator) : null;
@@ -160,6 +164,7 @@ export class TradingEngine {
             }
           : null,
         providerProblems,
+        identityCollisions: Math.max(0, ...idKeys(t).map((k) => (identity.get(k) ?? 1) - 1)),
         costs,
         strategies: this.d.strategies,
         enabledStrategies: settings.enabledStrategies,

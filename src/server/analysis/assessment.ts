@@ -15,6 +15,7 @@ export interface AssessmentContext {
   referenceSizeSol: number;
   creatorHistory: CreatorHistory | null;
   providerProblems: string[];
+  identityCollisions?: number;
   costs: CostModel;
   strategies: StrategyRegistry;
   enabledStrategies: string[];
@@ -48,6 +49,7 @@ export function assessToken(t: TokenState, ctx: AssessmentContext): AssessmentRe
     referenceSizeSol: ctx.referenceSizeSol,
     creatorHistory: ctx.creatorHistory,
     providerProblems: ctx.providerProblems,
+    identityCollisions: ctx.identityCollisions,
   });
   const opportunity = scoreOpportunity(features, ctx.now);
 

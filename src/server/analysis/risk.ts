@@ -30,6 +30,8 @@ export interface RiskContext {
   creatorHistory: CreatorHistory | null;
   /** Critical providers currently unhealthy (e.g. "pump-log-stream down"). */
   providerProblems: string[];
+  /** Number of *other* recently active tokens sharing this token's symbol or name. */
+  identityCollisions?: number;
 }
 
 export const TIER_THRESHOLDS: Array<{ min: number; tier: RiskTier }> = [
@@ -165,7 +167,8 @@ export function assessRisk(t: TokenState, f: MarketFeatures, ctx: RiskContext): 
   // Early buyers who bought within 10s of launch and still hold a large share (sniper / bundle risk).
   if (t.observedFromLaunch && t.createdAt) {
     const early = new Set(t.trades.toArray().filter((e) => e.side === 'buy' && e.ts - t.createdAt! <= 10_000 && e.trader !== t.creator).map((e) => e.trader));
-    const earlyHeld = [...early].reduce((a, k) => a + Math.max(0, t.flows.get(k) ?? 0), 0) / 1e15 * 100;
+    const supply = t.mintInfo ? Number(t.mintInfo.supplyRaw) : 1e15;
+    const earlyHeld = ([...early].reduce((a, k) => a + Math.max(0, t.flows.get(k) ?? 0), 0) / supply) * 100;
     if (earlyHeld > 25) c.add('holder_concentration', 'SNIPER_CLUSTER', 30, 'high', `${early.size} wallets that bought within 10s of launch still hold ~${earlyHeld.toFixed(1)}%`, 'derived:observed-trade-flows', 0.6);
     else if (earlyHeld > 12) c.add('holder_concentration', 'SNIPER_PRESENCE', 15, 'medium', `Launch-window buyers hold ~${earlyHeld.toFixed(1)}%`, 'derived:observed-trade-flows', 0.6);
   }
@@ -213,6 +216,11 @@ export function assessRisk(t: TokenState, f: MarketFeatures, ctx: RiskContext): 
   if (w5 && realSol > 0 && w5.volumeSol > realSol * 3)
     c.add('trading_anomalies', 'VOLUME_EXCEEDS_LIQUIDITY', 20, 'medium', `5m volume ${w5.volumeSol.toFixed(1)} SOL is >3× liquidity`, 'solana-rpc-logs');
   if (f.momentum5mPct !== null && f.momentum5mPct > 300) c.add('trading_anomalies', 'PARABOLIC', 20, 'medium', `Price +${f.momentum5mPct.toFixed(0)}% in 5m`, 'solana-rpc-logs');
+  if (f.drawdownFromPeakPct !== null && f.drawdownFromPeakPct <= -40)
+    c.add('trading_anomalies', 'PRICE_COLLAPSE', 30, 'high', `Price ${f.drawdownFromPeakPct.toFixed(0)}% below its 1h peak`, 'solana-rpc-logs');
+  if (f.momentum1mPct !== null && f.momentum1mPct <= -25) c.add('trading_anomalies', 'SHARP_DROP', 25, 'high', `Price ${f.momentum1mPct.toFixed(0)}% in the last minute`, 'solana-rpc-logs');
+  if ((ctx.identityCollisions ?? 0) >= 1)
+    c.add('trading_anomalies', 'DUPLICATE_IDENTITY', Math.min(30, 10 + 5 * ctx.identityCollisions!), 'medium', `${ctx.identityCollisions} other active token(s) use the same name/symbol (copycat or impersonation risk)`, 'pumpraelie:registry', 0.7);
 
   // ---------- permissions & mechanics ----------------------------------------------
   const mi = t.mintInfo;
@@ -263,6 +271,9 @@ export function assessRisk(t: TokenState, f: MarketFeatures, ctx: RiskContext): 
   }
   if (f.tradeCount < 10) c.add('data_reliability', 'THIN_HISTORY', 20, 'low', `Only ${f.tradeCount} trades observed`, 'solana-rpc-logs');
   if (!t.observedFromLaunch) c.add('data_reliability', 'PARTIAL_HISTORY', 10, 'info', 'Trade history does not start at launch', 'internal');
+  const ageSec = t.createdAt ? (ctx.now - t.createdAt) / 1000 : null;
+  if (ageSec !== null && ageSec < 300) c.add('data_reliability', 'VERY_YOUNG', 25, 'medium', `Token is ${Math.round(ageSec)}s old: behaviour not yet established`, 'solana-rpc-logs');
+  else if (ageSec !== null && ageSec < 900) c.add('data_reliability', 'YOUNG', 10, 'low', `Token is ${Math.round(ageSec / 60)}m old`, 'solana-rpc-logs');
   if (ctx.providerProblems.length) c.add('data_reliability', 'PROVIDER_UNHEALTHY', 40, 'high', `Providers degraded: ${ctx.providerProblems.join(', ')}`, 'provider-health');
   if (c.missing.includes('liquidity_state') || c.missing.includes('mint_account')) c.flags.add('CRITICAL_DATA_MISSING');
 

@@ -105,11 +105,12 @@ export function computeFeatures(t: TokenState, now: number): MarketFeatures {
   const prior = trades.filter((e) => e.ts >= now - 360_000 && e.ts < now - 60_000).reduce((a, e) => a + e.solLamports / 1e9, 0) / 5;
   const volumeAcceleration = prior > 0 ? w1.volumeSol / prior : w1.volumeSol > 0 ? null : 0;
 
-  // Liquidity change over 5 minutes (real SOL reserves).
-  const lh = t.liquidityHistory.toArray().filter((p) => p.ts <= now);
+  // Liquidity change: current withdrawable SOL versus the highest level in the last 5 minutes,
+  // so a fast drain is caught even if liquidity first rose inside the window.
+  const lh = t.liquidityHistory.toArray().filter((p) => p.ts <= now && p.ts >= now - 300_000);
   const lNow = lh[lh.length - 1];
-  const lThen = [...lh].reverse().find((p) => p.ts <= now - 300_000) ?? lh[0];
-  const liquidityChange5mPct = lNow && lThen && lThen.realSol > 0 && lThen !== lNow ? pctChange(lThen.realSol, lNow.realSol) : null;
+  const lMax = lh.reduce((m, p) => Math.max(m, p.realSol), 0);
+  const liquidityChange5mPct = lNow && lMax > 0 && lh.length >= 2 ? pctChange(lMax, lNow.realSol) : null;
 
   // Manipulation heuristics over the 15-minute window.
   const w15 = trades.filter((e) => e.ts >= now - 900_000);

@@ -9,5 +9,5 @@
     "noEmit": true
   },
   "include": ["src/web/**/*.ts", "src/web/**/*.tsx", "src/shared/**/*.ts"],
-  "exclude": ["src/web/vite.config.ts"]
+  "exclude": ["src/web/vite.config.mts"]
 }
