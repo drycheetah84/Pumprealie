@@ -67,6 +67,7 @@ All seven phases are implemented. The application builds, starts, ingests live S
 | `npm run test:integration` against mainnet | ✅ 4 passed (live log stream decode, curve reconciliation vs official SDK quotes, mint reads, DexScreener) |
 | Server run against mainnet (paper mode) | ✅ ~42 trades/s ingested, hundreds of tokens tracked, all providers `ok`, curves reconciled every 4s |
 | Dashboard rendered via headless Chromium | ✅ all pages, no console errors |
+| End-to-end paper lifecycle on live mainnet data (separate instance, **deliberately permissive** EV thresholds for demonstration) | ✅ 7 entries filled against fresh on-chain reads; exits by stop (filled at −10.2% / −12.1% vs a 10% stop — stops gap), trailing stop, and risk escalation (`SEVERE_LIQUIDITY_DETERIORATION`, −41%); remaining positions valued at executable quotes. Closed trades were net negative, supporting the conservative defaults. One finding led to a fix: launch bursts were mistaken for volume acceleration (now requires a prior baseline). |
 | CLI backtest on recorded mainnet data | ✅ runs; 0 trades at default thresholds over a short window (expected: conservative) |
 | Docker image build | ⚠️ not verified (no Docker daemon in the build environment) |
 | Live transaction submission | ⚠️ **not executed** (no funded wallet was used, by design). Instruction building uses the official SDK; signing policy, settlement and reconciliation are covered by unit tests with fakes. Do a small manual live test with a dedicated wallet before relying on it. |
